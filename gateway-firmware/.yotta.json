@@ -1,0 +1,6 @@
+{
+  "build": {
+    "target": "frdm-k64f-st-ble-gcc,*",
+    "targetSetExplicitly": true
+  }
+}

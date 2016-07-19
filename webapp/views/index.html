@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Watches</title>
+  <link href='https://fonts.googleapis.com/css?family=Open+Sans:400,300,600' rel='stylesheet' type='text/css'>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
+</head>
+
+<body>
+  <div>
+    <ul id="devices"></ul>
+  </div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    var socket = io.connect(location.origin);
+    // current model
+    var devices = {};
+
+    var baseTemp = {{{tempJson}}};
+    var names = {{{namesJson}}};
+
+    socket.onevent = function(e) {
+      if (e.data[0].indexOf('change-') === 0) {
+        var topic = e.data[0].replace('change-', '').split('/');
+        var router = e.data[1];
+        var payload = e.data[2];
+
+        var device = devices[topic[0]] || {
+          mac: topic[0],
+          gateways: {}
+        };
+
+        if (topic[1] === 'rssi') {
+          device.gateways[router] = {
+            rssi: payload,
+            lastSeen: new Date()
+          };
+        }
+        else if (topic[1] === 'temperature') {
+          device.temperature = Number(payload);
+        }
+
+        devices[topic[0]] = device;
+
+        deviceUpdated(device);
+      }
+    };
+
+    function deviceUpdated(device) {
+      console.log('deviceUpdated', device);
+      // device has { mac, temperature, gateways }
+      // gateways has { rssi, lastSeen }
+      var el = device.el;
+      if (!el) {
+        el = device.el = document.createElement('li');
+        el.dataset.mac = device.mac;
+        el.innerHTML = '<span class="mac"></span> - <span class="temperature"></span> (<ul class="gateways"></ul>)';
+        document.querySelector('#devices').appendChild(el);
+      }
+      else {
+        el.querySelector('.gateways').innerHTML = '';
+      }
+
+      if (!device.temperature) {
+        device.temperature = Number(baseTemp[device.mac]);
+      }
+
+      el.querySelector('.mac').textContent = names[device.mac];
+      el.querySelector('.temperature').textContent = (device.temperature / 100).toFixed(2) + ' °C';
+
+      Object.keys(device.gateways).forEach(function(gw) {
+        var g = device.gateways[gw];
+        var seen = g.lastSeen.toTimeString().split(' ')[0];
+        var li = document.createElement('li');
+
+        li.textContent = gw + ' - RSSI: ' + g.rssi + ' - Last Seen: ' + seen;
+        el.querySelector('.gateways').appendChild(li);
+      });
+
+    }
+  </script>
+</body>
+</html>

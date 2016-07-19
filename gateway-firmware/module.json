@@ -1,0 +1,15 @@
+{
+  "name": "gateway-firmware",
+  "version": "1.0.0",
+  "bin": "./source",
+  "private": true,
+  "description": "BLE Gateway Watch firmware for APM",
+  "author": "Jan Jongboom <jan.jongboom@arm.com>",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "ble": "^2.6.0",
+    "x-nucleo-idb0xa1": "^2.0.3",
+    "mbed-client-ethernet-c-style": "~0.1.2",
+    "mbed-time": "^1.2.1"
+  }
+}

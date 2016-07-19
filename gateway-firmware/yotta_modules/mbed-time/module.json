@@ -1,0 +1,22 @@
+{
+  "name": "mbed-time",
+  "version": "1.2.1",
+  "description": "Module providing POSIX time using mbed HAL.",
+  "keywords": [],
+  "author": "Marcus Chang <marcus.chang@arm.com>",
+  "repository": {
+    "url": "git@github.com:ARMmbed/mbed-time.git",
+    "type": "git"
+  },
+  "homepage": "https://github.com/ARMmbed/mbed-time",
+  "licenses": [
+    {
+      "url": "https://spdx.org/licenses/Apache-2.0",
+      "type": "Apache-2.0"
+    }
+  ],
+  "dependencies": {
+    "mbed-hal": "^1.0.0"
+  },
+  "targetDependencies": {}
+}
