@@ -6,20 +6,159 @@
   <link href='https://fonts.googleapis.com/css?family=Open+Sans:400,300,600' rel='stylesheet' type='text/css'>
   <link rel="manifest" href="/manifest.json">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Open Sans', sans-serif;
+    }
+    #deviceChart {
+      width: 100%;
+      height: 100%;
+    }
+    #legend {
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+    }
+    #legend div {
+      border: solid 1px;
+      font-size: 13px;
+      padding: 4px 15px;
+      margin: 10px;
+    }
+    #legend div:nth-child(1) {
+      background-color: rgba(255, 99, 132, 0.2);
+      border-color: rgba(255, 99, 132, 1);
+    }
+    #legend div:nth-child(2) {
+      background-color: rgba(54, 162, 235, 0.2);
+      border-color: rgba(54, 162, 235, 1);
+    }
+    #legend div:nth-child(3) {
+      background-color: rgba(255, 206, 86, 0.2);
+      border-color: rgba(255, 206, 86, 1);
+    }
+    #legend div.inactive {
+      background-color: rgba(200, 200, 200, 0.2);
+      border-color: rgba(200, 200, 200, 1);
+    }
+  </style>
 </head>
 
 <body>
-  <div>
-    <ul id="devices"></ul>
+  <div id="legend">
+    {{#gateways}}
+    <div>{{friendlyName}}</div>
+    {{/gateways}}
+    <div class="inactive">Inactive (+10s)</div>
   </div>
+  <canvas id="deviceChart"></canvas>
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/chart.js"></script>
   <script>
+    /*global Chart io */
+
     var socket = io.connect(location.origin);
     // current model
     var devices = {};
 
     var baseTemp = {{{tempJson}}};
-    var names = {{{namesJson}}};
+    var macAndNames = {{{namesJson}}};
+    var gateways = {{{gatewayJson}}};
+    var names = Object.keys(macAndNames).map(function(mac) { return macAndNames[mac]; });
+    var gwNames = gateways.map(function(g, ix) {
+      return document.querySelector('#legend div:nth-child(' + (ix + 1) + ')').textContent;
+    });
+
+    Chart.defaults.global.legend.display = false;
+    Chart.defaults.global.defaultFontFamily	= 'Open Sans, sans-serif';
+
+    var deviceChart = new Chart(document.querySelector('#deviceChart'), {
+      type: 'bar',
+      data: {
+        labels: names,
+        datasets: [
+          {
+            label: '',
+            data: [],
+            backgroundColor: [],
+            borderColor: [],
+            borderWidth: 1
+          }
+        ],
+      },
+      options: {
+        scales: {
+          yAxes: [{
+            ticks: {
+              suggestedMin: 0,
+              suggestedMax: 30
+            }
+          }]
+        },
+        tooltips: {
+          mode: 'single',
+          callbacks: {
+            label: function(tt, data) {
+              var mac = Object.keys(macAndNames)[tt.index];
+              var device = devices[mac];
+
+              var gw = Object.keys(device.gateways);
+
+              return [
+                mac.split(/(..)/).filter(function(a) { return !!a; }).join(':'),
+                'Temperature: ' + (device.temperature / 100).toFixed(2) + ' °C',
+                '',
+                'Seen at gateways:',
+                '',
+              ].concat(gw.map(function(g, ix) {
+                g = device.gateways[g];
+                var time = g.lastSeen.toTimeString().split(' ')[0];
+                return gwNames[ix] + ' - ' + g.rssi + ' dBm - ' + time;
+              }));
+            }
+          }
+        }
+      }
+    });
+
+    function updateChart(device) {
+      var ds = deviceChart.data.datasets[0];
+
+      var ix = Object.keys(macAndNames).indexOf(device.mac);
+      ds.data[ix] = device.temperature / 100;
+
+      // closest gateway...
+      var gw = device.gateways;
+      var closest = Object.keys(gw).filter(function(x) {
+        return gw[x].lastSeen > (new Date() - 10000); // need to be seen in last 10 seconds
+      }).sort(function(x, y) {
+        return gw[y].rssi - gw[x].rssi;
+      })[0];
+
+      switch (gateways.indexOf(closest)) {
+        case 0:
+          ds.backgroundColor[ix] = 'rgba(255, 99, 132, 0.2)';
+          ds.borderColor[ix] = 'rgba(255, 99, 132, 1)';
+          break;
+        case 1:
+          ds.backgroundColor[ix] = 'rgba(54, 162, 235, 0.2)';
+          ds.borderColor[ix] = 'rgba(54, 162, 235, 1)';
+          break;
+        case 2:
+          ds.backgroundColor[ix] = 'rgba(255, 206, 86, 0.2)';
+          ds.borderColor[ix] = 'rgba(255, 206, 86, 1)';
+          break;
+        default:
+          ds.backgroundColor[ix] = 'rgba(200, 200, 200, 0.2)';
+          ds.borderColor[ix] = 'rgba(200, 200, 200, 1)';
+          break;
+      }
+
+      deviceChart.update();
+    }
+
 
     socket.onevent = function(e) {
       if (e.data[0].indexOf('change-') === 0) {
@@ -49,37 +188,15 @@
     };
 
     function deviceUpdated(device) {
-      console.log('deviceUpdated', device);
-      // device has { mac, temperature, gateways }
-      // gateways has { rssi, lastSeen }
-      var el = device.el;
-      if (!el) {
-        el = device.el = document.createElement('li');
-        el.dataset.mac = device.mac;
-        el.innerHTML = '<span class="mac"></span> - <span class="temperature"></span> (<ul class="gateways"></ul>)';
-        document.querySelector('#devices').appendChild(el);
-      }
-      else {
-        el.querySelector('.gateways').innerHTML = '';
-      }
-
-      if (!device.temperature) {
-        device.temperature = Number(baseTemp[device.mac]);
-      }
-
-      el.querySelector('.mac').textContent = names[device.mac];
-      el.querySelector('.temperature').textContent = (device.temperature / 100).toFixed(2) + ' °C';
-
-      Object.keys(device.gateways).forEach(function(gw) {
-        var g = device.gateways[gw];
-        var seen = g.lastSeen.toTimeString().split(' ')[0];
-        var li = document.createElement('li');
-
-        li.textContent = gw + ' - RSSI: ' + g.rssi + ' - Last Seen: ' + seen;
-        el.querySelector('.gateways').appendChild(li);
-      });
-
+      updateChart(device);
     }
+
+    // redraw every device every few seconds
+    setInterval(function() {
+      Object.keys(devices).forEach(function(k) {
+        updateChart(devices[k]);
+      });
+    }, 2000);
   </script>
 </body>
 </html>
